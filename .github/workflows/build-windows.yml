@@ -55,6 +55,7 @@ jobs:
           }
           if ($failedFiles.Count -gt 0) {
             Write-Host "Failed test files: $($failedFiles -join ', ')"
+            "failed_files=$($failedFiles -join ',')" >> $env:GITHUB_OUTPUT
             exit 1
           }
 
@@ -80,6 +81,38 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Preserve unit-test failure
-        if: steps.unit_tests.outcome == 'failure'
+      - name: "Windows test failed: material merger"
+        if: contains(steps.unit_tests.outputs.failed_files, 'test_material_merger.py')
+        run: exit 1
+
+      - name: "Windows test failed: packing document service"
+        if: contains(steps.unit_tests.outputs.failed_files, 'test_packing_document_service.py')
+        run: exit 1
+
+      - name: "Windows test failed: packing service"
+        if: contains(steps.unit_tests.outputs.failed_files, 'test_packing_service.py')
+        run: exit 1
+
+      - name: "Windows test failed: PDF generator"
+        if: contains(steps.unit_tests.outputs.failed_files, 'test_pdf_generator.py')
+        run: exit 1
+
+      - name: "Windows test failed: purchase-order parser"
+        if: contains(steps.unit_tests.outputs.failed_files, 'test_purchase_order_parser.py')
+        run: exit 1
+
+      - name: "Windows test failed: review service"
+        if: contains(steps.unit_tests.outputs.failed_files, 'test_review_service.py')
+        run: exit 1
+
+      - name: "Windows test failed: translation repository"
+        if: contains(steps.unit_tests.outputs.failed_files, 'test_translation_repository.py')
+        run: exit 1
+
+      - name: "Windows test failed: translation service"
+        if: contains(steps.unit_tests.outputs.failed_files, 'test_translation_service.py')
+        run: exit 1
+
+      - name: "Windows test failed: printer"
+        if: contains(steps.unit_tests.outputs.failed_files, 'test_windows_printer.py')
         run: exit 1
