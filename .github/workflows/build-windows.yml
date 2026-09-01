@@ -38,14 +38,24 @@ jobs:
         env:
           PYTHONPATH: src
         run: |
-          python -m unittest discover -s tests -v 2>&1 |
-            Tee-Object -FilePath test-results.txt
-          $testExitCode = $LASTEXITCODE
-          if ($testExitCode -ne 0) {
-            $details = Get-Content test-results.txt -Raw
-            $details = $details.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
-            Write-Output "::error title=Windows unit tests failed::$details"
-            exit $testExitCode
+          $failedFiles = @()
+          foreach ($testFile in Get-ChildItem tests\test_*.py) {
+            $details = python -m unittest discover -s tests -p $testFile.Name -v 2>&1 |
+              Out-String
+            $testExitCode = $LASTEXITCODE
+            Write-Output $details
+            if ($testExitCode -ne 0) {
+              $failedFiles += $testFile.Name
+              if ($details.Length -gt 3000) {
+                $details = $details.Substring($details.Length - 3000)
+              }
+              $details = $details.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Host "::error file=tests/$($testFile.Name),line=1,title=Windows test failure::$details"
+            }
+          }
+          if ($failedFiles.Count -gt 0) {
+            Write-Host "Failed test files: $($failedFiles -join ', ')"
+            exit 1
           }
 
       - name: Build Windows onedir bundle
