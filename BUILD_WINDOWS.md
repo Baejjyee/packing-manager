@@ -16,6 +16,9 @@ PyInstaller는 교차 컴파일을 지원하지 않으므로 Windows용 exe는 W
 패키징된 exe 시작 검사를 수행한 뒤 ZIP을 업로드한다. 로컬 PC에는 Python을
 설치할 필요가 없다. Artifact 보관 기간은 14일이다.
 
+한글 PDF 출력을 위해 SIL Open Font License의 Noto Sans KR 글꼴도 번들에
+포함된다. 라이선스 원문은 `assets/fonts/OFL.txt`에 있다.
+
 ## Windows PC에서 직접 빌드
 
 1. 이 프로젝트 폴더 전체를 Windows PC로 복사한다.

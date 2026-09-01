@@ -17,6 +17,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import Paragraph, Table, TableStyle
 
+from packing_manager.config import FONT_DIR
 from packing_manager.models import PackingDocument, PackingLine, PackingPackage
 
 
@@ -289,6 +290,7 @@ def _register_korean_font() -> None:
     if _FONT_NAME in pdfmetrics.getRegisteredFontNames():
         return
     candidates = (
+        FONT_DIR / "NotoSansKR.ttf",
         Path("C:/Windows/Fonts/malgun.ttf"),
         Path("C:/Windows/Fonts/gulim.ttc"),
         Path("/System/Library/Fonts/Supplemental/AppleGothic.ttf"),

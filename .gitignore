@@ -15,6 +15,7 @@ env/
 build/
 dist/
 *.spec
+!PackingManager.spec
 *.egg-info/
 
 # Runtime data and generated documents
