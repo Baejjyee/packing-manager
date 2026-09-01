@@ -1,0 +1,7 @@
+# Runtime dependencies
+PySide6>=6.7,<7
+pdfplumber>=0.11,<1
+reportlab>=4.2,<5
+
+# Windows executable packaging (run PyInstaller on Windows)
+PyInstaller>=6.10,<7
