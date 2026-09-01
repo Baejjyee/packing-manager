@@ -23,7 +23,8 @@ Packing Label PDF를 생성하는 사내용 PySide6 데스크톱 애플리케이
 - 자재발주서 PDF 파싱과 자재 병합 로직이 구현되어 있다.
 - SQLite 영문명 조회/저장과 PySide6 검토 화면이 구현되어 있다.
 - Packing List 및 A4 가로 좌우 2-up Packing Label PDF 생성이 구현되어 있다.
-- 포장 구성 입력 형식은 `발주량+Loss*개수`이며 쉼표로 여러 구성을 구분한다.
+- 자재별 중량, C.B.M, Packing 수량을 입력하며 Packing 수량 기본값은 54이다.
+- Packing 내역과 R/L 수는 `(발주량 + Loss) / Packing 수량`으로 자동 계산한다.
 - Windows 프린터 출력 어댑터는 구현되어 있으며 A4 가로·단면·300 DPI로 출력한다.
 - 실제 Windows PC와 실물 프린터에서 여백, 드라이버 설정, 출력 완료 여부를 검증해야 한다.
 

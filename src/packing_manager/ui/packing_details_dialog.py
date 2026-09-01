@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -20,18 +22,21 @@ from PySide6.QtWidgets import (
 )
 
 from packing_manager.models import PackingLineDetails, PurchaseOrder
-from packing_manager.services import parse_package_expression
+from packing_manager.services import build_equal_packages
+
+
+_DEFAULT_PACKING_QUANTITY = Decimal("54")
 
 
 class PackingDetailsDialog(QDialog):
-    """Collect ship date, weight, CBM, and per-package quantities."""
+    """Collect physical values and preview automatically divided rolls."""
 
     def __init__(self, order: PurchaseOrder, parent=None) -> None:  # noqa: ANN001
         super().__init__(parent)
         self.order = order
         self._details: list[PackingLineDetails] = []
         self.setWindowTitle("Packing 정보 입력")
-        self.resize(900, 430)
+        self.resize(1120, 470)
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -45,29 +50,55 @@ class PackingDetailsDialog(QDialog):
 
         layout.addWidget(
             QLabel(
-                "포장 구성 형식: 발주량+Loss*개수 — 예: 53+1*3, 8+2*1 "
-                "(총 4개 Label 생성)"
+                "Packing 내역은 (발주량 + Loss) ÷ Packing 수량으로 자동 계산됩니다. "
+                "Packing 수량 기본값은 54이며 자재별로 수정할 수 있습니다."
             )
         )
-        self.table = QTableWidget(len(order.materials), 4)
+        self.table = QTableWidget(len(order.materials), 7)
         self.table.setHorizontalHeaderLabels(
-            ("자재", "중량(KG)", "C.B.M", "포장 구성")
+            (
+                "자재",
+                "총수량",
+                "중량(KG)",
+                "C.B.M",
+                "Packing 수량",
+                "PACKING 내역",
+                "R/L 수",
+            )
         )
-        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch
+        )
+        self.table.horizontalHeader().setSectionResizeMode(
+            5, QHeaderView.ResizeMode.Stretch
+        )
         self.table.verticalHeader().setVisible(False)
         for row, material in enumerate(order.materials):
-            name = QTableWidgetItem(material.english_name or material.material_name)
-            name.setFlags(name.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.table.setItem(row, 0, name)
-            self.table.setItem(row, 1, QTableWidgetItem("0"))
-            self.table.setItem(row, 2, QTableWidgetItem("0"))
-            expression = (
-                f"{_number(material.order_quantity)}+{_number(material.loss)}*1"
+            packages = build_equal_packages(
+                material.order_quantity,
+                material.loss,
+                _DEFAULT_PACKING_QUANTITY,
             )
-            self.table.setItem(row, 3, QTableWidgetItem(expression))
-        self.table.setColumnWidth(0, 230)
-        self.table.setColumnWidth(1, 110)
-        self.table.setColumnWidth(2, 100)
+            self.table.setItem(
+                row,
+                0,
+                _readonly_item(material.english_name or material.material_name),
+            )
+            self.table.setItem(
+                row, 1, _readonly_item(_number(material.total_quantity), right=True)
+            )
+            self.table.setItem(row, 2, QTableWidgetItem("0"))
+            self.table.setItem(row, 3, QTableWidgetItem("0"))
+            self.table.setItem(
+                row, 4, QTableWidgetItem(_number(_DEFAULT_PACKING_QUANTITY))
+            )
+            self.table.setItem(row, 5, _readonly_item(_package_summary(packages)))
+            self.table.setItem(
+                row, 6, _readonly_item(str(len(packages)), right=True)
+            )
+        for column in (1, 2, 3, 4, 6):
+            self.table.setColumnWidth(column, 105)
+        self.table.cellChanged.connect(self._refresh_calculation)
         layout.addWidget(self.table)
 
         buttons = QDialogButtonBox(
@@ -92,31 +123,51 @@ class PackingDetailsDialog(QDialog):
         try:
             details: list[PackingLineDetails] = []
             for row, material in enumerate(self.order.materials):
-                weight = _decimal(self._text(row, 1), f"{row + 1}행 중량")
-                cbm = _decimal(self._text(row, 2), f"{row + 1}행 CBM")
-                packages = parse_package_expression(self._text(row, 3))
-                package_quantity = sum(
-                    (package.order_quantity for package in packages), Decimal()
+                weight = _decimal(self._text(row, 2), f"{row + 1}행 중량")
+                cbm = _decimal(self._text(row, 3), f"{row + 1}행 CBM")
+                packing_quantity = _decimal(
+                    self._text(row, 4), f"{row + 1}행 Packing 수량"
                 )
-                package_loss = sum(
-                    (package.loss for package in packages), Decimal()
+                packages = build_equal_packages(
+                    material.order_quantity,
+                    material.loss,
+                    packing_quantity,
                 )
-                if package_quantity != material.order_quantity:
-                    raise ValueError(
-                        f"{row + 1}행 포장 발주량 합계 {package_quantity}가 "
-                        f"발주량 {material.order_quantity}와 다릅니다."
+                details.append(
+                    PackingLineDetails(
+                        weight,
+                        cbm,
+                        packages,
+                        packing_quantity=packing_quantity,
                     )
-                if package_loss != material.loss:
-                    raise ValueError(
-                        f"{row + 1}행 포장 Loss 합계 {package_loss}가 "
-                        f"Loss {material.loss}와 다릅니다."
-                    )
-                details.append(PackingLineDetails(weight, cbm, packages))
+                )
         except ValueError as exc:
             QMessageBox.warning(self, "포장 정보 확인", str(exc))
             return
         self._details = details
         self.accept()
+
+    def _refresh_calculation(self, row: int, column: int) -> None:
+        if column != 4 or not 0 <= row < len(self.order.materials):
+            return
+        material = self.order.materials[row]
+        try:
+            packing_quantity = _decimal(
+                self._text(row, 4), f"{row + 1}행 Packing 수량"
+            )
+            packages = build_equal_packages(
+                material.order_quantity, material.loss, packing_quantity
+            )
+            summary = _package_summary(packages)
+            roll_count = str(len(packages))
+        except ValueError:
+            summary = "입력 확인"
+            roll_count = "-"
+
+        self.table.blockSignals(True)
+        self.table.item(row, 5).setText(summary)
+        self.table.item(row, 6).setText(roll_count)
+        self.table.blockSignals(False)
 
     def _text(self, row: int, column: int) -> str:
         item = self.table.item(row, column)
@@ -137,3 +188,19 @@ def _number(value: Decimal) -> str:
     if value == value.to_integral_value():
         return str(int(value))
     return format(value, "f")
+
+
+def _package_summary(packages) -> str:  # noqa: ANN001
+    totals = [_number(package.total_quantity) for package in packages]
+    counts = Counter(totals)
+    return "  ".join(f"{quantity}*{count}" for quantity, count in counts.items())
+
+
+def _readonly_item(value: str, *, right: bool = False) -> QTableWidgetItem:
+    item = QTableWidgetItem(value)
+    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+    if right:
+        item.setTextAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+    return item

@@ -153,7 +153,11 @@ class PackingPdfGenerator:
         rows.extend([[""] * len(headers) for _ in range(visible_rows - len(page_lines))])
         if visible_rows:
             rows[1][9] = _paragraph(document.item_name, 9)
-            rows[1][10] = _paragraph(document.po_number, 9)
+            rows[1][10] = _paragraph(
+                f"{document.po_number}\n"
+                f"({_format_number(document.finished_goods_quantity)} PRS)",
+                9,
+            )
 
         total_quantity = sum((line.total_quantity for line in document.lines), Decimal())
         total_weight = sum((line.weight_kg for line in document.lines), Decimal())
@@ -224,7 +228,7 @@ class PackingPdfGenerator:
         document: PackingDocument,
         package_number: int,
         line: PackingLine,
-        package: PackingPackage,
+        _package: PackingPackage,
         left: float,
         width: float,
         height: float,
@@ -270,11 +274,10 @@ class PackingPdfGenerator:
             ("Q'TY :", f"{_format_number(document.finished_goods_quantity)} PRS"),
             ("MATERIAL :", line.english_name),
             ("COLOR :", line.color),
-            ("Q'TY :", _label_quantity(package, line.unit)),
             ("SHIP DATE", document.shipping_date.strftime("%Y. %m. %d.")),
         ]
         start_y = top - 34 * mm
-        spacing = 14 * mm
+        spacing = 15 * mm
         for row_index, (label, value) in enumerate(rows):
             y = start_y - row_index * spacing
             pdf.setFont(_FONT_NAME, 12)
@@ -364,13 +367,6 @@ def _package_summary(packages: list[PackingPackage]) -> str:
 def _quantity_with_loss(quantity: Decimal, loss: Decimal) -> str:
     value = _format_number(quantity)
     return f"{value}+{_format_number(loss)}" if loss else value
-
-
-def _label_quantity(package: PackingPackage, unit: str) -> str:
-    quantity = _format_number(package.order_quantity)
-    if package.loss:
-        return f"{quantity} + LOSS {_format_number(package.loss)} {unit}"
-    return f"{quantity} {unit}"
 
 
 def _format_number(value: Decimal, places: int | None = None) -> str:

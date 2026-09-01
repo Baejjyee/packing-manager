@@ -26,6 +26,7 @@ class PackingLineDetails:
     weight_kg: Decimal
     cbm: Decimal
     packages: list[PackingPackage]
+    packing_quantity: Decimal = Decimal("54")
 
 
 @dataclass(slots=True)
@@ -41,6 +42,7 @@ class PackingLine:
     english_name: str = ""
     weight_kg: Decimal = Decimal("0")
     cbm: Decimal = Decimal("0")
+    packing_quantity: Decimal = Decimal("54")
     packages: list[PackingPackage] = field(default_factory=list)
 
     @property
@@ -84,6 +86,8 @@ class PackingDocument:
                 raise ValueError(f"{index}행 자재 영문명이 없습니다.")
             if not line.packages:
                 raise ValueError(f"{index}행 포장 수량 정보가 없습니다.")
+            if line.packing_quantity <= 0:
+                raise ValueError(f"{index}행 Packing 수량은 0보다 커야 합니다.")
             if any(
                 value < 0
                 for value in (

@@ -4,7 +4,10 @@ from pathlib import Path
 import unittest
 
 from packing_manager.models import MaterialItem, PackingLineDetails, PurchaseOrder
-from packing_manager.services import PackingDocumentService, parse_package_expression
+from packing_manager.services import (
+    PackingDocumentService,
+    build_equal_packages,
+)
 
 
 class StubGenerator:
@@ -19,16 +22,42 @@ class StubGenerator:
 
 
 class PackingDocumentServiceTest(unittest.TestCase):
-    def test_parses_compact_package_expression(self) -> None:
-        packages = parse_package_expression("53+1*3, 8+2*1")
+    def test_splits_total_quantity_by_default_packing_quantity(self) -> None:
+        packages = build_equal_packages(Decimal("191"), Decimal("6"))
 
-        self.assertEqual(len(packages), 4)
         self.assertEqual(
-            sum((package.order_quantity for package in packages), Decimal()),
-            Decimal("167"),
+            [package.total_quantity for package in packages],
+            [Decimal("54"), Decimal("54"), Decimal("54"), Decimal("35")],
         )
         self.assertEqual(
-            sum((package.loss for package in packages), Decimal()), Decimal("5")
+            sum((package.order_quantity for package in packages), Decimal()),
+            Decimal("191"),
+        )
+        self.assertEqual(
+            sum((package.loss for package in packages), Decimal()), Decimal("6")
+        )
+
+    def test_calculates_sample_order_roll_counts(self) -> None:
+        cases = (
+            ("191", "6", 4),
+            ("1818", "53", 35),
+            ("330", "10", 7),
+        )
+        for order_quantity, loss, expected_count in cases:
+            with self.subTest(order_quantity=order_quantity, loss=loss):
+                packages = build_equal_packages(
+                    Decimal(order_quantity), Decimal(loss), Decimal("54")
+                )
+                self.assertEqual(len(packages), expected_count)
+
+    def test_uses_user_selected_packing_quantity(self) -> None:
+        packages = build_equal_packages(
+            Decimal("191"), Decimal("6"), Decimal("50")
+        )
+
+        self.assertEqual(
+            [package.total_quantity for package in packages],
+            [Decimal("50"), Decimal("50"), Decimal("50"), Decimal("47")],
         )
 
     def test_builds_document_and_delegates_both_pdfs(self) -> None:
@@ -55,7 +84,7 @@ class PackingDocumentServiceTest(unittest.TestCase):
             PackingLineDetails(
                 Decimal("32.7"),
                 Decimal("0.10"),
-                parse_package_expression("53+1*3, 8+2*1"),
+                build_equal_packages(Decimal("167"), Decimal("5")),
             )
         ]
         generator = StubGenerator()
@@ -67,12 +96,8 @@ class PackingDocumentServiceTest(unittest.TestCase):
         service.generate(document, Path("list.pdf"), Path("labels.pdf"))
 
         self.assertEqual(len(document.lines[0].packages), 4)
+        self.assertEqual(document.lines[0].packing_quantity, Decimal("54"))
         self.assertEqual(generator.outputs, [Path("list.pdf"), Path("labels.pdf")])
-
-    def test_rejects_invalid_expression(self) -> None:
-        with self.assertRaises(ValueError):
-            parse_package_expression("not-a-package")
-
 
 if __name__ == "__main__":
     unittest.main()

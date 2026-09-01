@@ -72,6 +72,9 @@ class PackingPdfGeneratorTest(unittest.TestCase):
         self.assertIn("PACKING LIST", text)
         self.assertIn("CORDURA MESH", text)
         self.assertIn("133", text)
+        self.assertIn("51*2", text)
+        self.assertIn("ON260983", text)
+        self.assertIn("12,030 PRS", text)
 
     def test_generates_two_labels_per_page(self) -> None:
         output = self.output_directory / "labels.pdf"
@@ -85,6 +88,8 @@ class PackingPdfGeneratorTest(unittest.TestCase):
         self.assertIn("P/G NO : 1", first_page)
         self.assertIn("P/G NO : 2", first_page)
         self.assertIn("P/G NO : 3", second_page)
+        self.assertNotIn("50 + LOSS", first_page)
+        self.assertNotIn("30 + LOSS", second_page)
 
     def test_rejects_package_totals_that_do_not_match_line(self) -> None:
         document = _document()

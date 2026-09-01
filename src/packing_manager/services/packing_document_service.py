@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import re
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from pathlib import Path
 from typing import Protocol, Sequence
 
@@ -17,13 +16,6 @@ from packing_manager.models import (
 )
 
 from .pdf_generator import PackingPdfGenerator
-
-
-_PACKAGE_PATTERN = re.compile(
-    r"^\s*(?P<quantity>\d+(?:\.\d+)?)"
-    r"(?:\s*\+\s*(?P<loss>\d+(?:\.\d+)?))?"
-    r"(?:\s*[xX*]\s*(?P<count>\d+))?\s*$"
-)
 
 
 class PackingPdfWriter(Protocol):
@@ -64,6 +56,7 @@ class PackingDocumentService:
                 loss=material.loss,
                 weight_kg=detail.weight_kg,
                 cbm=detail.cbm,
+                packing_quantity=detail.packing_quantity,
                 packages=list(detail.packages),
             )
             for material, detail in zip(order.materials, details, strict=True)
@@ -92,30 +85,44 @@ class PackingDocumentService:
         self.generator.create_packing_labels(document, label_path)
 
 
-def parse_package_expression(expression: str) -> list[PackingPackage]:
-    """Parse `quantity+loss*count` groups separated by commas.
+def build_equal_packages(
+    order_quantity: Decimal,
+    loss: Decimal,
+    packing_quantity: Decimal = Decimal("54"),
+) -> list[PackingPackage]:
+    """Split order quantity plus Loss into equal rolls and one remainder.
 
-    Example: ``53+1*3, 8+2*1`` creates four package labels.
+    The order and Loss portions remain separately traceable for validation,
+    while each package's total is capped at ``packing_quantity``.
     """
-    groups = [group.strip() for group in expression.split(",") if group.strip()]
-    if not groups:
-        raise ValueError("포장 구성을 입력해 주세요.")
+    values = (order_quantity, loss, packing_quantity)
+    if any(value < 0 for value in values[:2]):
+        raise ValueError("발주량과 Loss는 0 이상이어야 합니다.")
+    if packing_quantity <= 0:
+        raise ValueError("Packing 수량은 0보다 커야 합니다.")
 
+    total = order_quantity + loss
+    if total <= 0:
+        raise ValueError("발주량과 Loss의 합계는 0보다 커야 합니다.")
+
+    full_count = int(total // packing_quantity)
+    remainder = total - packing_quantity * full_count
+    package_totals = [packing_quantity] * full_count
+    if remainder:
+        package_totals.append(remainder)
+
+    remaining_order = order_quantity
+    remaining_loss = loss
     packages: list[PackingPackage] = []
-    for group in groups:
-        match = _PACKAGE_PATTERN.fullmatch(group)
-        if match is None:
-            raise ValueError(
-                f"포장 구성 형식이 올바르지 않습니다: {group!r} "
-                "(예: 53+1*3, 8+2*1)"
-            )
-        try:
-            quantity = Decimal(match.group("quantity"))
-            loss = Decimal(match.group("loss") or "0")
-            count = int(match.group("count") or "1")
-        except (InvalidOperation, ValueError) as exc:
-            raise ValueError(f"포장 구성 숫자가 올바르지 않습니다: {group!r}") from exc
-        if count < 1:
-            raise ValueError("포장 개수는 1개 이상이어야 합니다.")
-        packages.extend(PackingPackage(quantity, loss) for _ in range(count))
+    for package_total in package_totals:
+        package_order = min(remaining_order, package_total)
+        package_loss = package_total - package_order
+        if package_loss > remaining_loss:
+            raise ValueError("포장 수량을 발주량과 Loss로 나눌 수 없습니다.")
+        packages.append(PackingPackage(package_order, package_loss))
+        remaining_order -= package_order
+        remaining_loss -= package_loss
+
+    if remaining_order or remaining_loss:
+        raise ValueError("포장 수량 계산 결과가 발주량/Loss와 다릅니다.")
     return packages

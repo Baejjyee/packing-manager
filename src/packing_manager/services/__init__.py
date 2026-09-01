@@ -2,7 +2,10 @@
 
 from .material_merger import merge_materials
 from .packing_service import PackingService
-from .packing_document_service import PackingDocumentService, parse_package_expression
+from .packing_document_service import (
+    PackingDocumentService,
+    build_equal_packages,
+)
 from .pdf_generator import PackingPdfGenerator
 from .review_service import OrderReviewService
 from packing_manager.models import MissingTranslation
@@ -17,5 +20,5 @@ __all__ = [
     "OrderReviewService",
     "TranslationService",
     "merge_materials",
-    "parse_package_expression",
+    "build_equal_packages",
 ]
