@@ -32,9 +32,21 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Run unit tests
+        id: unit_tests
+        shell: powershell
+        continue-on-error: true
         env:
           PYTHONPATH: src
-        run: python -m unittest discover -s tests -v
+        run: |
+          python -m unittest discover -s tests -v 2>&1 |
+            Tee-Object -FilePath test-results.txt
+          $testExitCode = $LASTEXITCODE
+          if ($testExitCode -ne 0) {
+            $details = Get-Content test-results.txt -Raw
+            $details = $details.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Windows unit tests failed::$details"
+            exit $testExitCode
+          }
 
       - name: Build Windows onedir bundle
         run: python -m PyInstaller --noconfirm --clean PackingManager.spec
@@ -57,3 +69,7 @@ jobs:
           path: dist/PackingManager-windows.zip
           if-no-files-found: error
           retention-days: 14
+
+      - name: Preserve unit-test failure
+        if: steps.unit_tests.outcome == 'failure'
+        run: exit 1
